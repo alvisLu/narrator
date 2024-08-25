@@ -34,7 +34,7 @@ function App() {
   const [isLoadingAiChat, setIsLoadingAiChat] = React.useState(false);
   const toast = useToast();
   const voices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
-  const [aiVoice, setAiVoice] = React.useState("");
+  const [aiVoice, setAiVoice] = React.useState(voices[0]);
   const [password, setPassword] = React.useState("");
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [isShowPwd, setIsShowPwd] = React.useState(false);
@@ -264,6 +264,7 @@ function App() {
                 </InputRightElement>
               </InputGroup>
               <Button
+                colorScheme="blue"
                 onClick={() => {
                   setIsAdmin(password === process.env.REACT_APP_PASSWORD);
                 }}
@@ -292,8 +293,10 @@ function App() {
                 <Tag size="lg">
                   字數: {content.replace(/\s/g, "").length} (最多 4096 個字)
                 </Tag>
+                <Text>選擇 AI 聲音</Text>
                 <Select
                   w="100px"
+                  value={aiVoice}
                   placeholder="AI 聲音"
                   onChange={(e) => {
                     setAiVoice(e.target.value);
