@@ -1,23 +1,38 @@
 import React from "react";
 import {
+  Box,
   Button,
   Card,
   CardBody,
+  HStack,
   Input,
+  Link,
+  Select,
+  Tag,
   Text,
   Textarea,
   useToast,
+  VStack,
 } from "@chakra-ui/react";
 import pdfToText from "react-pdftotext";
 import { ReadableStream } from "stream/web";
-import { AudioSpeech, generateAudioSpeech } from "./api/openai";
+import {
+  AudioSpeech,
+  generateAudioSpeech,
+  generateChatCompletions,
+} from "./api/openai";
 
 function App() {
   const [pdfFile, setPdfFile] = React.useState<File | null>(null);
   const [content, setContent] = React.useState("");
-  const [audioUrl, setAudioUrl] = React.useState("123");
+  const [text, setText] = React.useState("");
+  const [audioUrl, setAudioUrl] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoadingPdfToText, setIsLoadingPdfToText] = React.useState(false);
+  const [isLoadingAiChat, setIsLoadingAiChat] = React.useState(false);
   const toast = useToast();
+  const voices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
+  const [aiVoice, setAiVoice] = React.useState("");
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.target.files && setPdfFile(e.target.files[0]);
@@ -32,10 +47,11 @@ function App() {
       });
       return;
     }
-
     try {
+      setIsLoadingPdfToText(true);
       const text = await pdfToText(pdfFile);
-      setContent(text);
+      setText(text.replace(/ /g, ""));
+      setIsLoadingPdfToText(false);
     } catch (error) {
       toast({
         title: "pdf to text failed",
@@ -61,12 +77,12 @@ function App() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      setContent(text);
+      setText(text.replace(/\s/g, ""));
     };
     reader.readAsText(file);
   };
 
-  async function processReader(reader: ReadableStreamDefaultReader) {
+  async function processAudioReader(reader: ReadableStreamDefaultReader) {
     const chunks = [];
 
     while (true) {
@@ -80,9 +96,6 @@ function App() {
       chunks.push(value);
     }
   }
-
-  // input example
-  //"1-1 通貨膨脹會偷走你的錢\n\n在日常生活中，存在著一位我們看不見的小偷，悄悄偷走我們辛苦賺來的金錢。大多數的民眾對這件事情都很無感，因為當他們翻開皮夾、看見帳戶的數字時，金額並不會有任何變動；因此他們沒有意識到，儘管數字沒有變少，但實際上我們能買到的東西，早已不如從前。\n\n二十年前珍珠奶茶初露頭角，身為學生的我總是喜歡來一杯珍奶，我當時購買的價格就是全台統一的25元；而時隔多年之後，珍珠奶茶一杯已經要價50元；當初只要5元的養樂多，現在也要8元以上。換句話說，雖然我們的錢沒有真的被偷走，實際買得到的東西卻變少了。讓實際購買力下降的罪魁禍首，就是「通貨膨脹」。\n\n根據台灣行政院主計處的統計資料，1981年的消費者物價指數為55.24，2021年6月底的數字為104.14，換算為年化報酬率得到的年通膨率為1.6％，遠高於目前0.8％的定存利率。\n\n想想你在四十年前好不容易省吃儉用，存下第一桶金100萬，隨著時間過去，你猜猜目前的實質購買力剩下多少呢？只剩52萬多，很誇張吧？你有將近一半的資產都被通膨給偷走了。",
   const handleTextToSpeech = async () => {
     try {
       if (!content) {
@@ -96,14 +109,14 @@ function App() {
       setIsLoading(true);
 
       const response = await generateAudioSpeech({
-        input: content,
-        voice: "alloy",
+        input: content.replace(/\s/g, ""),
+        voice: aiVoice,
       } as AudioSpeech);
 
       const stream = response.body as ReadableStream;
       if (stream) {
         const reader = stream.getReader();
-        await processReader(reader);
+        await processAudioReader(reader);
         setIsLoading(false);
         toast({
           title: `轉換成功`,
@@ -120,32 +133,134 @@ function App() {
     }
   };
 
+  const aiChat = async () => {
+    try {
+      setIsLoadingAiChat(true);
+      const res = await generateChatCompletions([
+        {
+          role: "system",
+          content:
+            //"你是一個文章的朗讀者，朗讀 '文章內容' 文章內容中有類似圖片或表格的文字跳過不要念。",
+            "請整理 '書本內容'，使用 json 格式區分章節，章節名稱為 'key'，章節內容為 'value'",
+        },
+        {
+          role: "user",
+          content: `書本內容: \`\`\`${text}\`\`\``,
+        },
+      ]);
+
+      // Read the body as a stream
+      const reader = res.body?.getReader();
+      const chunks: Uint8Array[] = [];
+
+      if (!reader) {
+        console.error("No response body");
+        return;
+      }
+      let done: boolean | undefined = false;
+      while (!done) {
+        const { done: isDone, value } = await reader.read();
+        done = isDone;
+        if (value) {
+          chunks.push(value);
+        }
+      }
+
+      // Combine the chunks into a single Uint8Array
+      const fullChunk = new Uint8Array(
+        chunks.reduce((acc, chunk) => acc + chunk.length, 0),
+      );
+      let offset = 0;
+      for (const chunk of chunks) {
+        fullChunk.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      // Convert Uint8Array to string
+      const _text = new TextDecoder().decode(fullChunk);
+
+      // Parse the string as JSON
+      const textJson = JSON.parse(_text);
+
+      console.log({ textJson });
+      setIsLoadingAiChat(false);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   return (
     <div className="App">
       <header className="App-header">
-        <Card>
-          <CardBody>
-            <Button colorScheme="blue" onClick={handlePdfFile}>
-              trans pdf to text
-            </Button>
-            {/* <Button colorScheme="blue" onClick={handleTextFile}> */}
-            {/*   show text */}
-            {/* </Button> */}
-            <Input
-              placeholder="Select Your file"
-              size="md"
-              type="file"
-              onChange={handleUpload}
-            />
-            <Card overflowY="auto" h="500px">
-              <CardBody>
-                <Text fontSize="md">{content}</Text>
-              </CardBody>
-            </Card>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
+        {false && (
+          <Card>
+            <CardBody>
+              <Button
+                colorScheme="blue"
+                isLoading={isLoadingPdfToText}
+                onClick={handlePdfFile}
+              >
+                trans pdf to text
+              </Button>
+
+              <Button
+                colorScheme="blue"
+                isLoading={isLoadingAiChat}
+                onClick={aiChat}
+              >
+                ai chat
+              </Button>
+
+              {/* <Button colorScheme="blue" onClick={handleTextFile}> */}
+              {/*   show text */}
+              {/* </Button> */}
+              <Input
+                placeholder="Select Your file"
+                size="md"
+                type="file"
+                onChange={handleUpload}
+              />
+              <Card overflowY="auto" h="500px">
+                <CardBody>
+                  <Text fontSize="md">{text}</Text>
+                </CardBody>
+              </Card>
+            </CardBody>
+          </Card>
+        )}
+        <Box p={10}>
+          <VStack spacing={2} align="flex-start">
+            <HStack spacing={4}>
+              <Text>
+                {`PDF 轉檔可以參考: `}
+                <Link
+                  href="https://www.pdf2go.com/result#j=6f5ce518-4e6e-4b0f-82e0-e369ae28d2a2"
+                  color="teal.500"
+                  w="100px"
+                  isExternal
+                >
+                  PDF to Text
+                </Link>
+              </Text>
+              <Tag size="lg">
+                字數: {content.replace(/\s/g, "").length} (最多 4096 個字)
+              </Tag>
+              <Select
+                w="100px"
+                placeholder="AI 聲音"
+                onChange={(e) => {
+                  setAiVoice(e.target.value);
+                }}
+              >
+                {voices.map((voice) => {
+                  return (
+                    <option key={voice} value={voice}>
+                      {voice}
+                    </option>
+                  );
+                })}
+              </Select>
+            </HStack>
             <Textarea
               h="70vh"
               onChange={(e) => {
@@ -161,8 +276,8 @@ function App() {
               開始轉換
             </Button>
             <audio controls src={audioUrl}></audio>
-          </CardBody>
-        </Card>
+          </VStack>
+        </Box>
       </header>
     </div>
   );
