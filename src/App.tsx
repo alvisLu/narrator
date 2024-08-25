@@ -6,6 +6,8 @@ import {
   CardBody,
   HStack,
   Input,
+  InputGroup,
+  InputRightElement,
   Link,
   Select,
   Tag,
@@ -33,6 +35,9 @@ function App() {
   const toast = useToast();
   const voices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
   const [aiVoice, setAiVoice] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [isAdmin, setIsAdmin] = React.useState(false);
+  const [isShowPwd, setIsShowPwd] = React.useState(false);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.target.files && setPdfFile(e.target.files[0]);
@@ -228,56 +233,99 @@ function App() {
             </CardBody>
           </Card>
         )}
-        <Box p={10}>
-          <VStack spacing={2} align="flex-start">
-            <HStack spacing={4}>
-              <Text>
-                {`PDF 轉檔可以參考: `}
-                <Link
-                  href="https://www.pdf2go.com/result#j=6f5ce518-4e6e-4b0f-82e0-e369ae28d2a2"
-                  color="teal.500"
-                  w="100px"
-                  isExternal
-                >
-                  PDF to Text
-                </Link>
-              </Text>
-              <Tag size="lg">
-                字數: {content.replace(/\s/g, "").length} (最多 4096 個字)
-              </Tag>
-              <Select
-                w="100px"
-                placeholder="AI 聲音"
-                onChange={(e) => {
-                  setAiVoice(e.target.value);
+
+        {!isAdmin && (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            height="100vh"
+          >
+            <HStack spacing={4} align="center">
+              <InputGroup size="md">
+                <Input
+                  pr="4.5rem"
+                  type={isShowPwd ? "text" : "password"}
+                  placeholder="請輸入密碼"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                  }}
+                />
+                <InputRightElement width="4.5rem">
+                  <Button
+                    h="1.75rem"
+                    size="sm"
+                    onClick={() => {
+                      setIsShowPwd(!isShowPwd);
+                    }}
+                  >
+                    {isShowPwd ? "Hide" : "Show"}
+                  </Button>
+                </InputRightElement>
+              </InputGroup>
+              <Button
+                onClick={() => {
+                  setIsAdmin(password === process.env.REACT_APP_PASSWORD);
                 }}
               >
-                {voices.map((voice) => {
-                  return (
-                    <option key={voice} value={voice}>
-                      {voice}
-                    </option>
-                  );
-                })}
-              </Select>
+                登入
+              </Button>
             </HStack>
-            <Textarea
-              h="70vh"
-              onChange={(e) => {
-                setContent(e.target.value);
-              }}
-              placeholder="請輸入文字"
-            />
-            <Button
-              colorScheme="blue"
-              isLoading={isLoading}
-              onClick={handleTextToSpeech}
-            >
-              開始轉換
-            </Button>
-            <audio controls src={audioUrl}></audio>
-          </VStack>
-        </Box>
+          </Box>
+        )}
+
+        {isAdmin && (
+          <Box p={10}>
+            <VStack spacing={2} align="flex-start">
+              <HStack spacing={4}>
+                <Text>
+                  {`PDF 轉檔可以參考: `}
+                  <Link
+                    href="https://www.pdf2go.com/result#j=6f5ce518-4e6e-4b0f-82e0-e369ae28d2a2"
+                    color="teal.500"
+                    w="100px"
+                    isExternal
+                  >
+                    PDF to Text
+                  </Link>
+                </Text>
+                <Tag size="lg">
+                  字數: {content.replace(/\s/g, "").length} (最多 4096 個字)
+                </Tag>
+                <Select
+                  w="100px"
+                  placeholder="AI 聲音"
+                  onChange={(e) => {
+                    setAiVoice(e.target.value);
+                  }}
+                >
+                  {voices.map((voice) => {
+                    return (
+                      <option key={voice} value={voice}>
+                        {voice}
+                      </option>
+                    );
+                  })}
+                </Select>
+              </HStack>
+              <Textarea
+                h="70vh"
+                onChange={(e) => {
+                  setContent(e.target.value);
+                }}
+                placeholder="請輸入文字"
+              />
+              <Button
+                colorScheme="blue"
+                isLoading={isLoading}
+                onClick={handleTextToSpeech}
+              >
+                開始轉換
+              </Button>
+              <audio controls src={audioUrl}></audio>
+            </VStack>
+          </Box>
+        )}
       </header>
     </div>
   );
